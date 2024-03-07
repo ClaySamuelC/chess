@@ -16,8 +16,8 @@ type Board struct {
 }
 
 type Info struct {
-	CanCastle bool
-	IsInCheck bool
+	HasKingMoved bool
+	IsInCheck    bool
 }
 
 type Vector2 struct {
@@ -67,7 +67,22 @@ func (b *Board) Move(srcX int, srcY int, destX int, destY int) {
 	b.Squares[destY][destX] = p
 	b.Squares[srcY][srcX] = nil
 
-	fmt.Printf("Moving from (%v, %v) to (%v, %v).\n", srcX, srcY, destX, destY)
+	fmt.Printf("Moving %v from (%v, %v) to (%v, %v).\n", p.Rank, srcX, srcY, destX, destY)
+
+	// special king cases
+	if p.Rank == "King" {
+		b.PlayerInfo[b.PlayerTurn].HasKingMoved = true
+
+		// if castling, move the rook as well
+		if destX-srcX == -2 {
+			b.Squares[destY][3] = b.Squares[destY][0]
+			b.Squares[destY][0] = nil
+		}
+		if destX-srcX == 2 {
+			b.Squares[destY][5] = b.Squares[destY][0]
+			b.Squares[destY][7] = nil
+		}
+	}
 
 	// special pawn cases
 	if p.Rank == "Pawn" {
@@ -102,7 +117,6 @@ func (b *Board) Move(srcX int, srcY int, destX int, destY int) {
 	} else {
 		b.PlayerTurn = "White"
 	}
-	fmt.Printf("Current turn: %v, Last Double Pawn Move: %v, En Passant Loc: (%v, %v)\n", b.CurrentTurn, b.LastEnPassant, b.EnPassantLoc.X, b.EnPassantLoc.Y)
 }
 
 func (b *Board) SetDefault() {
@@ -133,4 +147,15 @@ func (b *Board) SetDefault() {
 	b.LastEnPassant = -1
 	b.IsHighlighted = false
 	b.PlayerTurn = "White"
+
+	b.PlayerInfo = make(map[string]*Info)
+	b.PlayerInfo["White"] = &Info{
+		HasKingMoved: false,
+		IsInCheck:    false,
+	}
+
+	b.PlayerInfo["Black"] = &Info{
+		HasKingMoved: false,
+		IsInCheck:    false,
+	}
 }

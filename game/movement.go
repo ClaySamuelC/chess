@@ -6,7 +6,6 @@ import (
 
 func (b *Board) isValidDest(x int, y int, team string) bool {
 	if x < 0 || x > 7 || y < 0 || y > 7 {
-		fmt.Println("False")
 		return false
 	}
 
@@ -62,6 +61,24 @@ func (b *Board) GetPossibleMoves(p *Piece, pos *Vector2) []*Vector2 {
 
 func (b *Board) getKingMoves(pos *Vector2, team string) []*Vector2 {
 	moves := make([]*Vector2, 0)
+
+	// check if player can castle
+	if !b.PlayerInfo[team].HasKingMoved {
+		// fmt.Println("King has not moved")
+		// check left
+		if b.Squares[pos.Y][0].Rank == "Rook" && b.Squares[pos.Y][0].Team == team {
+			// fmt.Println("Left rook in position.")
+			if b.Squares[pos.Y][1] == nil && b.Squares[pos.Y][2] == nil && b.Squares[pos.Y][3] == nil {
+				moves, _ = b.appendIfValid(-2, 0, moves, pos, team)
+			}
+		}
+		// check right
+		if b.Squares[pos.Y][7].Rank == "Rook" && b.Squares[pos.Y][0].Team == team {
+			if b.Squares[pos.Y][5] == nil && b.Squares[pos.Y][6] == nil {
+				moves, _ = b.appendIfValid(2, 0, moves, pos, team)
+			}
+		}
+	}
 
 	moves, _ = b.appendIfValid(-1, -1, moves, pos, team)
 	moves, _ = b.appendIfValid(-1, 0, moves, pos, team)
