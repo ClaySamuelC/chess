@@ -10,6 +10,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
@@ -110,12 +111,12 @@ type Game struct{}
 
 func (g *Game) Update() error {
 
-	// check if mouse is clicked
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+	// get mouse coords and convert to game space
+	mouseX, mouseY := ebiten.CursorPosition()
+	mouseTileY, mouseTileX := getTileSpace(mouseY, mouseX)
 
-		// get mouse coords and convert to game space
-		mouseX, mouseY := ebiten.CursorPosition()
-		mouseTileY, mouseTileX := getTileSpace(mouseY, mouseX)
+	// check if mouse is clicked
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 
 		// check if clicked square is within bounds
 		if mouseTileX >= 0 && mouseTileX <= 7 && mouseTileY >= 0 && mouseTileY <= 7 {
@@ -138,6 +139,14 @@ func (g *Game) Update() error {
 				}
 
 			}
+		}
+	} else if board.IsHighlighted && inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
+		if isInMoveableTiles(mouseTileX, mouseTileY) {
+
+			// make the move
+			board.Move(board.HighlightX, board.HighlightY, mouseTileX, mouseTileY)
+			board.IsHighlighted = false
+
 		}
 	}
 
