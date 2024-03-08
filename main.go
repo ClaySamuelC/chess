@@ -2,7 +2,6 @@ package main
 
 import (
 	"chess/game"
-	"fmt"
 	"image/color"
 	_ "image/png"
 	"log"
@@ -22,14 +21,6 @@ const (
 	yOffset  = 19
 )
 
-func PrintSquares(squares []*game.Vector2) {
-	fmt.Println("Possible moves: [")
-	for _, square := range squares {
-		fmt.Printf("  Can move to (%d, %d)\n", square.X, square.Y)
-	}
-	fmt.Println("]")
-}
-
 func getScreenSpace(tile_y int, tile_x int) (float64, float64) {
 	y := tile_y*tileSize + yOffset - 3
 	x := tile_x*tileSize + xOffset - 2
@@ -48,11 +39,10 @@ var (
 	backgroundImg *ebiten.Image
 	pieceImageMap map[string]*ebiten.Image
 
-	board         *game.Board
 	selectedColor color.RGBA
 	moveableColor color.RGBA
 
-	moveableTiles []*game.Vector2
+	chess *game.Chess
 )
 
 func getImage(imagePath string) *ebiten.Image {
@@ -75,16 +65,6 @@ func getPieceImage(piece *game.Piece) *ebiten.Image {
 	return img
 }
 
-func isInMoveableTiles(x int, y int) bool {
-	for _, tile := range moveableTiles {
-		if tile.X == x && tile.Y == y {
-			return true
-		}
-	}
-
-	return false
-}
-
 func init() {
 	backgroundImg = getImage("assets/board.png")
 	selectedColor = color.RGBA{0x00, 0x80, 0xFF, 0x80}
@@ -104,7 +84,7 @@ func init() {
 	pieceImageMap["BlackQueen"] = getImage("assets/BlackQueen.png")
 	pieceImageMap["BlackKing"] = getImage("assets/BlackKing.png")
 
-	board = game.NewBoard()
+	chess = game.NewGame()
 }
 
 type Game struct{}
@@ -134,7 +114,6 @@ func (g *Game) Update() error {
 				success := board.HighlightSquare(mouseTileX, mouseTileY)
 				if success {
 					moveableTiles = board.GetPossibleMoves(board.Squares[mouseTileY][mouseTileX], &game.Vector2{mouseTileX, mouseTileY})
-
 					PrintSquares(moveableTiles)
 				}
 

@@ -1,161 +1,146 @@
 package game
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
 
-type Board struct {
-	Squares       [8][8]*Piece
-	PlayerTurn    string
-	CurrentTurn   int
-	IsHighlighted bool
-	HighlightX    int
-	HighlightY    int
-	PossibleMoves []*Vector2
-	EnPassantLoc  *Vector2
-	LastEnPassant int
+type Chess struct {
+	Board         [64]*Piece
+	Turn          string
+	EnPassantLoc  int
+	HalfMoveClock int
+	FullMoveClock int
 	PlayerInfo    map[string]*Info
 }
 
 type Info struct {
-	HasKingMoved bool
-	IsInCheck    bool
+	IsKingCastleValid  bool
+	IsQueenCastleValid bool
 }
 
-type Vector2 struct {
-	X int
-	Y int
-}
-
-func (b *Board) CanEnPassant(pawnLoc *Vector2, dx int, dy int) bool {
-	fmt.Printf("Current Turn: %v, Last En Passantable Move: %v\n", b.CurrentTurn, b.LastEnPassant)
-	if b.LastEnPassant != b.CurrentTurn-1 {
-		return false
+func CreateGame(fen string) (*Chess, error) {
+	// default game: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 0h"
+	pieceMap := map[byte]Piece{
+		'P': {"White", "Pawn"},
+		'N': {"White", "Knight"},
+		'B': {"White", "Bishop"},
+		'R': {"White", "Rook"},
+		'Q': {"White", "Queen"},
+		'K': {"White", "King"},
+		'p': {"Black", "Pawn"},
+		'n': {"Black", "Knight"},
+		'b': {"Black", "Bishop"},
+		'r': {"Black", "Rook"},
+		'q': {"Black", "Queen"},
+		'k': {"Black", "King"},
 	}
-	if b.PlayerTurn == "White" {
-		dy = -dy
-	}
-	return b.EnPassantLoc.X == pawnLoc.X+dx && b.EnPassantLoc.Y == pawnLoc.Y+dy
-}
 
-func (b *Board) HighlightSquare(x int, y int) bool {
-	if b.IsHighlighted && b.HighlightX == x && b.HighlightY == y {
-		return false
-	}
-	if b.Squares[y][x] != nil {
-		if b.Squares[y][x].Team == b.PlayerTurn {
-			fmt.Printf("Highlighting Square(%d, %d)\n", x, y)
-			b.IsHighlighted = true
-			b.HighlightX = x
-			b.HighlightY = y
+	info := strings.Fields(fen)
 
-			return true
+	c := &Chess{}
+	x := 0
+	y := 7
+
+	// populate board
+	for _, char := range info[0] {
+		switch char {
+		case '/':
+			y--
+			x = 0
+		case '1', '2', '3', '4', '5', '6', '7', '8':
+			x += int(char - '0')
+		default:
+			piece, ok := pieceMap[byte(char)]
+			if !ok {
+				return nil, fmt.Errorf("Invalid FEN char: %c", char)
+			}
+			c.Board[y*8+x] = &piece
+			x++
 		}
 	}
 
-	b.IsHighlighted = false
-	return false
+	// set current turn
+	if info[1] == "w" {
+		c.Turn = "White"
+	} else {
+		c.Turn = "Black"
+	}
+
+	// set castle info
+	c.PlayerInfo = make(map[string]*Info)
+
+	c.PlayerInfo["White"] = &Info{false, false}
+	c.PlayerInfo["Black"] = &Info{false, false}
+	for _, char := range info[2] {
+		switch char {
+		case 'K':
+			c.PlayerInfo["White"].IsKingCastleValid = true
+		case 'Q':
+			c.PlayerInfo["White"].IsQueenCastleValid = true
+		case 'k':
+			c.PlayerInfo["Black"].IsKingCastleValid = true
+		case 'q':
+			c.PlayerInfo["Black"].IsQueenCastleValid = true
+		}
+	}
+
+	// set en passant targets
+	if info[3] == "-" {
+		c.EnPassantLoc = -1
+	} else {
+		c.EnPassantLoc = (int(info[3][1])-49)*8 + int(info[3][0]) - 97
+	}
+
+	// set half move clock
+	c.HalfMoveClock, _ = strconv.Atoi(info[4])
+
+	// set full move clock
+	c.FullMoveClock, _ = strconv.Atoi(info[5])
+
+	return c, nil
 }
 
-func NewBoard() *Board {
-	b := &Board{}
-	b.SetDefault()
-	return b
-}
+func (c *Chess) Move(src int, dest int) {
+	p := c.Board[src]
 
-func (b *Board) Move(srcX int, srcY int, destX int, destY int) {
-	p := b.Squares[srcY][srcX]
+	c.Board[dest] = p
+	c.Board[src] = nil
 
-	b.Squares[destY][destX] = p
-	b.Squares[srcY][srcX] = nil
-
-	fmt.Printf("Moving %v from (%v, %v) to (%v, %v).\n", p.Rank, srcX, srcY, destX, destY)
+	fmt.Printf("Moving %v from (%v, %v) to (%v, %v).\n", p.Rank, src/8, src%8, dest/8, dest%8)
 
 	// special king cases
 	if p.Rank == "King" {
-		b.PlayerInfo[b.PlayerTurn].HasKingMoved = true
+		c.PlayerInfo[c.Turn].IsKingCastleValid = true
 
 		// if castling, move the rook as well
-		if destX-srcX == -2 {
-			b.Squares[destY][3] = b.Squares[destY][0]
-			b.Squares[destY][0] = nil
-		}
-		if destX-srcX == 2 {
-			b.Squares[destY][5] = b.Squares[destY][0]
-			b.Squares[destY][7] = nil
+		if dest-src == -2 {
+			c.Board[dest-1] = c.Board[dest]
+			c.Board[dest-4] = nil
+		} else if dest-src == 2 {
+			c.Board[dest+1] = c.Board[dest-4]
+			c.Board[dest+3] = nil
 		}
 	}
 
 	// special pawn cases
 	if p.Rank == "Pawn" {
-		if destY == 0 || destY == 7 { // Promotion
+		if dest/8 == 0 || dest/8 == 7 { // Promotion
 			fmt.Println("Promote!!!!")
 			p.Rank = "Queen"
-		} else if destY-srcY == 2 { // If pawn double moved, update en passant info
-			b.EnPassantLoc = &Vector2{destX, destY - 1}
-			b.LastEnPassant = b.CurrentTurn
-			fmt.Printf("Making double move, En Passant loc = (%v, %v), En Passant/Current Turn (%v, %v).\n", b.EnPassantLoc.X, b.EnPassantLoc.Y, b.LastEnPassant, b.CurrentTurn)
-		} else if destY-srcY == -2 {
-			b.EnPassantLoc = &Vector2{destX, destY + 1}
-			b.LastEnPassant = b.CurrentTurn
-			fmt.Printf("Making double move, En Passant loc = (%v, %v), En Passant/Current Turn (%v, %v).\n", b.EnPassantLoc.X, b.EnPassantLoc.Y, b.LastEnPassant, b.CurrentTurn)
-		}
-		// Handle En Passant
-		if b.LastEnPassant == b.CurrentTurn-1 && destX == b.EnPassantLoc.X && destY == b.EnPassantLoc.Y {
-			// destroy pawn under move
-			dy := -1
-			if b.PlayerTurn == "White" {
-				dy = 1
-			}
-
-			b.Squares[destY+dy][destX] = nil
+		} else if dest-src == 2 { // If pawn double moved, update en passant info
+			c.EnPassantLoc = dest - 8
+			fmt.Printf("Making double move, En Passant loc = (%v, %v), En Passant/Current Turn (%v, %v).\n", c.EnPassantLoc.X, c.EnPassantLoc.Y, c.LastEnPassant, c.CurrentTurn)
+		} else if dest-src == -2 {
+			c.EnPassantLoc = dest + 8
+			fmt.Printf("Making double move, En Passant loc = (%v, %v), En Passant/Current Turn (%v, %v).\n", c.EnPassantLoc.X, c.EnPassantLoc.Y, c.LastEnPassant, c.CurrentTurn)
 		}
 	}
 
-	b.IsHighlighted = false
-	b.CurrentTurn += 1
-	if b.PlayerTurn == "White" {
-		b.PlayerTurn = "Black"
+	if c.Turn == "White" {
+		c.Turn = "Black"
 	} else {
-		b.PlayerTurn = "White"
-	}
-}
-
-func (b *Board) SetDefault() {
-	for i := 0; i < 8; i++ {
-		b.Squares[1][i] = NewPiece("Pawn", "Black")
-		b.Squares[6][i] = NewPiece("Pawn", "White")
-	}
-
-	b.Squares[0][0] = NewPiece("Rook", "Black")
-	b.Squares[0][1] = NewPiece("Knight", "Black")
-	b.Squares[0][2] = NewPiece("Bishop", "Black")
-	b.Squares[0][3] = NewPiece("Queen", "Black")
-	b.Squares[0][4] = NewPiece("King", "Black")
-	b.Squares[0][5] = NewPiece("Bishop", "Black")
-	b.Squares[0][6] = NewPiece("Knight", "Black")
-	b.Squares[0][7] = NewPiece("Rook", "Black")
-
-	b.Squares[7][0] = NewPiece("Rook", "White")
-	b.Squares[7][1] = NewPiece("Knight", "White")
-	b.Squares[7][2] = NewPiece("Bishop", "White")
-	b.Squares[7][3] = NewPiece("Queen", "White")
-	b.Squares[7][4] = NewPiece("King", "White")
-	b.Squares[7][5] = NewPiece("Bishop", "White")
-	b.Squares[7][6] = NewPiece("Knight", "White")
-	b.Squares[7][7] = NewPiece("Rook", "White")
-
-	b.CurrentTurn = 1
-	b.LastEnPassant = -1
-	b.IsHighlighted = false
-	b.PlayerTurn = "White"
-
-	b.PlayerInfo = make(map[string]*Info)
-	b.PlayerInfo["White"] = &Info{
-		HasKingMoved: false,
-		IsInCheck:    false,
-	}
-
-	b.PlayerInfo["Black"] = &Info{
-		HasKingMoved: false,
-		IsInCheck:    false,
+		c.Turn = "White"
 	}
 }
