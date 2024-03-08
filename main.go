@@ -2,6 +2,7 @@ package main
 
 import (
 	"chess/game"
+	"fmt"
 	"image/color"
 	_ "image/png"
 	"log"
@@ -21,18 +22,18 @@ const (
 	yOffset  = 19
 )
 
-func getScreenSpace(tile_y int, tile_x int) (float64, float64) {
-	y := tile_y*tileSize + yOffset - 3
-	x := tile_x*tileSize + xOffset - 2
+func getScreenSpace(tile int) (int, int) {
+	x := (tile%8)*tileSize + xOffset - 2
+	y := (tile/8)*tileSize + yOffset - 5
 
-	return float64(y), float64(x)
+	return x, y
 }
 
-func getTileSpace(screen_y int, screen_x int) (int, int) {
+func getTileSpace(screen_x int, screen_y int) int {
 	y := math.Floor(float64((screen_y - yOffset) / tileSize))
 	x := math.Floor(float64((screen_x - xOffset) / tileSize))
 
-	return int(y), int(x)
+	return int(y*8 + x)
 }
 
 var (
@@ -42,7 +43,9 @@ var (
 	selectedColor color.RGBA
 	moveableColor color.RGBA
 
-	chess *game.Chess
+	chess          *game.Chess
+	selectedSquare int
+	possibleMoves  []int
 )
 
 func getImage(imagePath string) *ebiten.Image {
@@ -57,12 +60,17 @@ func getImage(imagePath string) *ebiten.Image {
 func getPieceImage(piece *game.Piece) *ebiten.Image {
 	var key string = piece.Team + piece.Rank
 
-	img, ok := pieceImageMap[key]
-	if ok == false {
-		log.Fatalf("Image %s doesn't exist", key)
+	return pieceImageMap[key]
+}
+
+func isIn(x int, arr []int) bool {
+	for _, num := range arr {
+		if x == num {
+			return true
+		}
 	}
 
-	return img
+	return false
 }
 
 func init() {
@@ -84,47 +92,51 @@ func init() {
 	pieceImageMap["BlackQueen"] = getImage("assets/BlackQueen.png")
 	pieceImageMap["BlackKing"] = getImage("assets/BlackKing.png")
 
-	chess = game.NewGame()
+	var err error
+	chess, err = game.CreateDefaultGame()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	selectedSquare = -1
 }
 
 type Game struct{}
 
 func (g *Game) Update() error {
-
 	// get mouse coords and convert to game space
 	mouseX, mouseY := ebiten.CursorPosition()
-	mouseTileY, mouseTileX := getTileSpace(mouseY, mouseX)
+	mouseTile := getTileSpace(mouseX, mouseY)
 
 	// check if mouse is clicked
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		fmt.Println(mouseTile)
 
 		// check if clicked square is within bounds
-		if mouseTileX >= 0 && mouseTileX <= 7 && mouseTileY >= 0 && mouseTileY <= 7 {
+		if mouseTile >= 0 && mouseTile < 64 {
 
 			// Check if it is appropriate to make move
-			if board.IsHighlighted && isInMoveableTiles(mouseTileX, mouseTileY) {
+			if selectedSquare != -1 && isIn(mouseTile, possibleMoves) {
 
 				// make the move
-				board.Move(board.HighlightX, board.HighlightY, mouseTileX, mouseTileY)
-				board.IsHighlighted = false
-
-			} else {
+				chess.Move(selectedSquare, mouseTile)
+				selectedSquare = -1
 
 				// Attempt to highlight clicked square
-				success := board.HighlightSquare(mouseTileX, mouseTileY)
-				if success {
-					moveableTiles = board.GetPossibleMoves(board.Squares[mouseTileY][mouseTileX], &game.Vector2{mouseTileX, mouseTileY})
-					PrintSquares(moveableTiles)
-				}
-
+			} else if chess.Board[mouseTile] != nil && chess.Board[mouseTile].Team == chess.Turn {
+				fmt.Printf("Selecting square %v (%v %v)\n", mouseTile, chess.Board[mouseTile].Team, chess.Board[mouseTile].Rank)
+				selectedSquare = mouseTile
+				possibleMoves = chess.GetPossibleMoves(chess.Board[mouseTile], mouseTile)
+			} else {
+				selectedSquare = -1
 			}
 		}
-	} else if board.IsHighlighted && inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
-		if isInMoveableTiles(mouseTileX, mouseTileY) {
+	} else if selectedSquare != -1 && inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
+		if isIn(mouseTile, possibleMoves) {
 
 			// make the move
-			board.Move(board.HighlightX, board.HighlightY, mouseTileX, mouseTileY)
-			board.IsHighlighted = false
+			chess.Move(selectedSquare, mouseTile)
+			selectedSquare = -1
 
 		}
 	}
@@ -139,30 +151,28 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	op.GeoM.Translate(0, yOffset)
 	screen.DrawImage(backgroundImg, op)
 
-	// Highlight Selected Square
-	if board.IsHighlighted {
-		y, x := getScreenSpace(board.HighlightY, board.HighlightX)
+	// Highlight the selected square blue
+	if selectedSquare != -1 {
+		x, y := getScreenSpace(selectedSquare)
 		vector.DrawFilledRect(screen, float32(x), float32(y), tileSize, tileSize, selectedColor, false)
 	}
 
 	// Highlight Available Moves
-	if moveableTiles != nil && board.IsHighlighted {
-		for _, tile := range moveableTiles {
-			y, x := getScreenSpace(tile.Y, tile.X)
+	if possibleMoves != nil && selectedSquare != -1 {
+		for _, tile := range possibleMoves {
+			x, y := getScreenSpace(tile)
 			vector.DrawFilledRect(screen, float32(x), float32(y), tileSize, tileSize, moveableColor, false)
 		}
 	}
 
 	// Draw Chess Pieces
-	for y, row := range board.Squares {
-		for x, piece := range row {
-			if piece != nil {
-				yDraw, xDraw := getScreenSpace(y, x)
+	for i, piece := range chess.Board {
+		if piece != nil {
+			xDraw, yDraw := getScreenSpace(i)
 
-				op := &ebiten.DrawImageOptions{}
-				op.GeoM.Translate(xDraw, yDraw)
-				screen.DrawImage(getPieceImage(piece), op)
-			}
+			op := &ebiten.DrawImageOptions{}
+			op.GeoM.Translate(float64(xDraw), float64(yDraw))
+			screen.DrawImage(getPieceImage(piece), op)
 		}
 	}
 }

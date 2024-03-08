@@ -20,8 +20,13 @@ type Info struct {
 	IsQueenCastleValid bool
 }
 
+func CreateDefaultGame() (*Chess, error) {
+	game, err := CreateGame("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 0h")
+
+	return game, err
+}
+
 func CreateGame(fen string) (*Chess, error) {
-	// default game: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 0h"
 	pieceMap := map[byte]Piece{
 		'P': {"White", "Pawn"},
 		'N': {"White", "Knight"},
@@ -41,13 +46,13 @@ func CreateGame(fen string) (*Chess, error) {
 
 	c := &Chess{}
 	x := 0
-	y := 7
+	y := 0
 
 	// populate board
 	for _, char := range info[0] {
 		switch char {
 		case '/':
-			y--
+			y++
 			x = 0
 		case '1', '2', '3', '4', '5', '6', '7', '8':
 			x += int(char - '0')
@@ -110,37 +115,12 @@ func (c *Chess) Move(src int, dest int) {
 
 	fmt.Printf("Moving %v from (%v, %v) to (%v, %v).\n", p.Rank, src/8, src%8, dest/8, dest%8)
 
-	// special king cases
-	if p.Rank == "King" {
-		c.PlayerInfo[c.Turn].IsKingCastleValid = true
-
-		// if castling, move the rook as well
-		if dest-src == -2 {
-			c.Board[dest-1] = c.Board[dest]
-			c.Board[dest-4] = nil
-		} else if dest-src == 2 {
-			c.Board[dest+1] = c.Board[dest-4]
-			c.Board[dest+3] = nil
-		}
-	}
-
-	// special pawn cases
-	if p.Rank == "Pawn" {
-		if dest/8 == 0 || dest/8 == 7 { // Promotion
-			fmt.Println("Promote!!!!")
-			p.Rank = "Queen"
-		} else if dest-src == 2 { // If pawn double moved, update en passant info
-			c.EnPassantLoc = dest - 8
-			fmt.Printf("Making double move, En Passant loc = (%v, %v), En Passant/Current Turn (%v, %v).\n", c.EnPassantLoc.X, c.EnPassantLoc.Y, c.LastEnPassant, c.CurrentTurn)
-		} else if dest-src == -2 {
-			c.EnPassantLoc = dest + 8
-			fmt.Printf("Making double move, En Passant loc = (%v, %v), En Passant/Current Turn (%v, %v).\n", c.EnPassantLoc.X, c.EnPassantLoc.Y, c.LastEnPassant, c.CurrentTurn)
-		}
-	}
-
 	if c.Turn == "White" {
 		c.Turn = "Black"
 	} else {
 		c.Turn = "White"
+		c.FullMoveClock += 1
 	}
+
+	c.HalfMoveClock += 1
 }
