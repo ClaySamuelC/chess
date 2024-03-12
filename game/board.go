@@ -93,7 +93,7 @@ func CreateGame(fen string) (*Chess, error) {
 
 	// set en passant targets
 	if info[3] == "-" {
-		c.EnPassantLoc = -1
+		c.EnPassantLoc = -999
 	} else {
 		c.EnPassantLoc = (int(info[3][1])-49)*8 + int(info[3][0]) - 97
 	}
@@ -110,10 +110,33 @@ func CreateGame(fen string) (*Chess, error) {
 func (c *Chess) Move(src int, dest int) {
 	p := c.Board[src]
 
+	if c.Board[dest] == nil && p.Rank != "Pawn" {
+		c.HalfMoveClock += 1
+	}
+	if p.Rank == "Pawn" {
+		if dest == c.EnPassantLoc {
+			fmt.Printf("En Passant at %v\n", dest)
+			if c.Turn == "White" {
+				c.Board[dest+8] = nil
+			} else {
+				c.Board[dest-8] = nil
+			}
+		}
+		if dest-src == 16 {
+			c.EnPassantLoc = dest - 8
+		} else if dest-src == -16 {
+			c.EnPassantLoc = dest + 8
+		} else {
+			c.EnPassantLoc = -999
+		}
+	} else {
+		c.EnPassantLoc = -999
+	}
+
 	c.Board[dest] = p
 	c.Board[src] = nil
 
-	fmt.Printf("Moving %v from (%v, %v) to (%v, %v).\n", p.Rank, src/8, src%8, dest/8, dest%8)
+	fmt.Printf("Moving %v from (%v, %v) to (%v, %v).\n", p.Rank, src%8, src/8, dest%8, dest/8)
 
 	if c.Turn == "White" {
 		c.Turn = "Black"
@@ -121,6 +144,4 @@ func (c *Chess) Move(src int, dest int) {
 		c.Turn = "White"
 		c.FullMoveClock += 1
 	}
-
-	c.HalfMoveClock += 1
 }
