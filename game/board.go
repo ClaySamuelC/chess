@@ -104,12 +104,16 @@ func CreateGame(fen string) (*Chess, error) {
 	for _, char := range info[2] {
 		switch char {
 		case 'K':
+			fmt.Println("White can castle king side.")
 			c.PlayerInfo["White"].IsKingCastleValid = true
 		case 'Q':
+			fmt.Println("White can castle queen side.")
 			c.PlayerInfo["White"].IsQueenCastleValid = true
 		case 'k':
+			fmt.Println("Black can castle king side.")
 			c.PlayerInfo["Black"].IsKingCastleValid = true
 		case 'q':
+			fmt.Println("Black can castle queen side.")
 			c.PlayerInfo["Black"].IsQueenCastleValid = true
 		}
 	}
@@ -164,6 +168,27 @@ func (c *Chess) IsInCheck(pos int) bool {
 
 func (c *Chess) Move(src int, dest int) {
 	p := c.Board[src]
+
+	if p.Rank == "King" {
+		c.PlayerInfo[c.Turn].IsKingCastleValid = false
+		c.PlayerInfo[c.Turn].IsQueenCastleValid = false
+
+		fmt.Println(dest - src)
+		if dest-src == -2 {
+			c.Board[dest+1] = c.Board[dest-2]
+			c.Board[dest-2] = nil
+		}
+		if dest-src == 2 {
+			c.Board[dest-1] = c.Board[dest+1]
+			c.Board[dest+1] = nil
+		}
+	} else if p.Rank == "Rook" {
+		if src%8 == 0 {
+			c.PlayerInfo[c.Turn].IsQueenCastleValid = false
+		} else if src%8 == 7 {
+			c.PlayerInfo[c.Turn].IsKingCastleValid = false
+		}
+	}
 
 	if c.Board[dest] == nil && p.Rank != "Pawn" {
 		c.HalfMoveClock += 1

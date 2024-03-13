@@ -93,7 +93,7 @@ func init() {
 	pieceImageMap["BlackKing"] = getImage("assets/BlackKing.png")
 
 	var err error
-	chess, err = game.CreateDefaultGame()
+	chess, err = game.CreateGame("r3k2r/1n6/8/8/8/8/6N1/R3K2R w KQkq - 0 1")
 	if err != nil {
 		log.Fatal(err)
 	}

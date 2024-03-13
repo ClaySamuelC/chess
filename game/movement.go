@@ -64,28 +64,28 @@ func (c *Chess) getKingMoves(pos int, team string) []int {
 		if c.canMoveInDirection(pos, d, team) {
 			dest := pos + d.Y*8 + d.X
 
-			fmt.Printf("Checking if king can move to %v\n", dest)
 			if !c.IsInCheck(dest) {
-				fmt.Println("True")
 				moves = append(moves, dest)
+			} else {
 			}
-
-			fmt.Println("False")
 		}
 	}
 
 	if c.PlayerInfo[team].IsKingCastleValid {
-		if c.canMoveInDirection(pos, Left, team) && c.canMoveInDirection(pos-1, Left, team) {
-			if !c.IsInCheck(pos-1) && !c.IsInCheck(pos-2) {
-				moves = append(moves, pos-2)
+		fmt.Println("Here 1")
+		if c.canMoveInDirection(pos, Right, team) && c.canMoveInDirection(pos+1, Right, team) {
+			fmt.Println("Here 2")
+			if !c.IsInCheck(pos+1) && !c.IsInCheck(pos+2) {
+				fmt.Println("Here 3")
+				moves = append(moves, pos+2)
 			}
 		}
 	}
 
-	if c.PlayerInfo[team].IsQueenCastleValid {
-		if c.canMoveInDirection(pos, Right, team) && c.canMoveInDirection(pos+1, Right, team) {
-			if !c.IsInCheck(pos+1) && !c.IsInCheck(pos+2) {
-				moves = append(moves, pos+2)
+	if c.PlayerInfo[c.Turn].IsQueenCastleValid {
+		if c.canMoveInDirection(pos, Left, team) && c.canMoveInDirection(pos-1, Left, team) {
+			if !c.IsInCheck(pos-1) && !c.IsInCheck(pos-2) {
+				moves = append(moves, pos-2)
 			}
 		}
 	}
