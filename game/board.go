@@ -6,6 +6,24 @@ import (
 	"strings"
 )
 
+var (
+	UpLeft    = &Vector2{-1, -1}
+	UpRight   = &Vector2{-1, 1}
+	DownLeft  = &Vector2{1, -1}
+	DownRight = &Vector2{1, 1}
+	Up        = &Vector2{0, -1}
+	Right     = &Vector2{1, 0}
+	Down      = &Vector2{0, 1}
+	Left      = &Vector2{-1, 0}
+
+	Diagonals      = &[]*Vector2{UpLeft, UpRight, DownRight, DownLeft}
+	Straights      = &[]*Vector2{Left, Up, Right, Down}
+	Adjacents      = &[]*Vector2{Left, UpLeft, Up, UpRight, Right, DownRight, Down, DownLeft}
+	WhitePawnMoves = &[]*Vector2{UpLeft, UpRight}
+	BlackPawnMoves = &[]*Vector2{DownLeft, DownRight}
+	KnightMoves    = &[]*Vector2{&Vector2{-2, -1}, &Vector2{-1, -2}, &Vector2{1, -2}, &Vector2{2, -1}, &Vector2{2, 1}, &Vector2{1, 2}, &Vector2{-1, 2}, &Vector2{-2, 1}}
+)
+
 type Chess struct {
 	Board         [64]*Piece
 	Turn          string
@@ -110,6 +128,38 @@ func CreateGame(fen string) (*Chess, error) {
 	c.FullMoveClock, _ = strconv.Atoi(info[5])
 
 	return c, nil
+}
+
+func (c *Chess) IsInCheck(pos int) bool {
+	enemy := "Black"
+	pawnDeltas := WhitePawnMoves
+	if c.Turn == "Black" {
+		pawnDeltas = BlackPawnMoves
+		enemy = "White"
+	}
+
+	// check for pawns in opposing pawn squares
+	if c.CheckSquares(pos, pawnDeltas, enemy, &map[string]bool{"Pawn": true, "King": true, "Bishop": true, "Queen": true}) {
+		return true
+	}
+
+	// check for knights
+	if c.CheckSquares(pos, KnightMoves, enemy, &map[string]bool{"Knight": true}) {
+		return true
+	}
+
+	// raycast for rooks or queens
+	if c.MultiRayCast(pos, Straights, enemy, &map[string]bool{"Rook": true, "Queen": true}) {
+		return true
+	}
+
+	// raycast for bishops or queens
+	if c.MultiRayCast(pos, Diagonals, enemy, &map[string]bool{"Bishop": true, "Queen": true}) {
+		return true
+	}
+
+	// check for king
+	return c.CheckSquares(pos, Adjacents, enemy, &map[string]bool{"King": true})
 }
 
 func (c *Chess) Move(src int, dest int) {
