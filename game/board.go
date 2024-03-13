@@ -20,6 +20,11 @@ type Info struct {
 	IsQueenCastleValid bool
 }
 
+type Vector2 struct {
+	X int
+	Y int
+}
+
 func CreateDefaultGame() (*Chess, error) {
 	game, err := CreateGame("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 0h")
 
