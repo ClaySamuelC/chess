@@ -4,24 +4,24 @@ import (
 	"fmt"
 )
 
-func isValidMove(src int, moveX int, moveY int) bool {
-	return !(src%8+moveX < 0 || src%8+moveX > 7 || src/8+moveY < 0 || src/8+moveY > 7)
+func isValidMove(src int, move *Vector2) bool {
+	return !(src%8+move.X < 0 || src%8+move.X > 7 || src/8+move.Y < 0 || src/8+move.Y > 7)
 }
 
-func (c *Chess) canMoveInDirection(pos int, dirX int, dirY int, team string) bool {
-	dest := pos + dirY*8 + dirX
-	return isValidMove(pos, dirX, dirY) && (c.Board[dest] == nil || c.Board[dest].Team != team)
+func (c *Chess) canMoveInDirection(pos int, d *Vector2, team string) bool {
+	dest := pos + d.Y*8 + d.X
+	return isValidMove(pos, d) && (c.Board[dest] == nil || c.Board[dest].Team != team)
 }
 
-func (c *Chess) getMovesInDirection(pos int, dirX int, dirY int, team string) []int {
+func (c *Chess) getMovesInDirection(pos int, d *Vector2, team string) []int {
 	moves := make([]int, 0)
 
 	for true {
-		if !c.canMoveInDirection(pos, dirX, dirY, team) {
+		if !c.canMoveInDirection(pos, d, team) {
 			return moves
 		}
 
-		pos += dirY*8 + dirX
+		pos += d.Y*8 + d.X
 		moves = append(moves, pos)
 
 		if c.Board[pos] != nil {
@@ -60,29 +60,34 @@ func (c *Chess) GetPossibleMoves(p *Piece, pos int) []int {
 func (c *Chess) getKingMoves(pos int, team string) []int {
 	moves := make([]int, 0)
 
-	if c.canMoveInDirection(pos, -1, -1, team) {
-		moves = append(moves, pos-9)
+	for _, d := range *Adjacents {
+		if c.canMoveInDirection(pos, d, team) {
+			dest := pos + d.Y*8 + d.X
+
+			fmt.Printf("Checking if king can move to %v\n", dest)
+			if !c.IsInCheck(dest) {
+				fmt.Println("True")
+				moves = append(moves, dest)
+			}
+
+			fmt.Println("False")
+		}
 	}
-	if c.canMoveInDirection(pos, -1, 0, team) {
-		moves = append(moves, pos-1)
+
+	if c.PlayerInfo[team].IsKingCastleValid {
+		if c.canMoveInDirection(pos, Left, team) && c.canMoveInDirection(pos-1, Left, team) {
+			if !c.IsInCheck(pos-1) && !c.IsInCheck(pos-2) {
+				moves = append(moves, pos-2)
+			}
+		}
 	}
-	if c.canMoveInDirection(pos, -1, 1, team) {
-		moves = append(moves, pos+7)
-	}
-	if c.canMoveInDirection(pos, 0, -1, team) {
-		moves = append(moves, pos-8)
-	}
-	if c.canMoveInDirection(pos, 0, 1, team) {
-		moves = append(moves, pos+8)
-	}
-	if c.canMoveInDirection(pos, 1, 0, team) {
-		moves = append(moves, pos+1)
-	}
-	if c.canMoveInDirection(pos, 1, -1, team) {
-		moves = append(moves, pos-7)
-	}
-	if c.canMoveInDirection(pos, 1, 1, team) {
-		moves = append(moves, pos+9)
+
+	if c.PlayerInfo[team].IsQueenCastleValid {
+		if c.canMoveInDirection(pos, Right, team) && c.canMoveInDirection(pos+1, Right, team) {
+			if !c.IsInCheck(pos+1) && !c.IsInCheck(pos+2) {
+				moves = append(moves, pos+2)
+			}
+		}
 	}
 
 	return moves
@@ -107,7 +112,6 @@ func (c *Chess) getPawnMoves(pos int, team string) []int {
 
 	// check forward-left
 	if (pos%8-1 >= 0 && c.Board[pos+dy-1] != nil && c.Board[pos+dy-1].Team != team) || c.EnPassantLoc == pos+dy-1 {
-		fmt.Println("Adding forward left.")
 		moves = append(moves, pos+dy-1)
 	}
 	// check forward-right
@@ -121,10 +125,9 @@ func (c *Chess) getPawnMoves(pos int, team string) []int {
 func (c *Chess) getRookMoves(pos int, team string) []int {
 	moves := make([]int, 0)
 
-	moves = append(moves, c.getMovesInDirection(pos, -1, 0, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, 0, -1, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, 0, 1, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, 1, 0, team)...)
+	for _, d := range *Straights {
+		moves = append(moves, c.getMovesInDirection(pos, d, team)...)
+	}
 
 	return moves
 }
@@ -132,32 +135,11 @@ func (c *Chess) getRookMoves(pos int, team string) []int {
 func (c *Chess) getKnightMoves(pos int, team string) []int {
 	moves := make([]int, 0)
 
-	if c.canMoveInDirection(pos, -2, -1, team) {
-		moves = append(moves, pos-10)
+	for _, d := range *KnightMoves {
+		if c.canMoveInDirection(pos, d, team) {
+			moves = append(moves, pos+d.Y*8+d.X)
+		}
 	}
-	if c.canMoveInDirection(pos, -2, 1, team) {
-		moves = append(moves, pos+6)
-	}
-	if c.canMoveInDirection(pos, -1, -2, team) {
-		moves = append(moves, pos-17)
-	}
-	if c.canMoveInDirection(pos, -1, 2, team) {
-		moves = append(moves, pos+15)
-	}
-	if c.canMoveInDirection(pos, 1, -2, team) {
-		moves = append(moves, pos-15)
-	}
-	if c.canMoveInDirection(pos, 1, 2, team) {
-		moves = append(moves, pos+17)
-	}
-	if c.canMoveInDirection(pos, 2, -1, team) {
-		moves = append(moves, pos-6)
-	}
-	if c.canMoveInDirection(pos, 2, 1, team) {
-		moves = append(moves, pos+10)
-	}
-
-	fmt.Printf("%v\n", moves)
 
 	return moves
 }
@@ -165,10 +147,9 @@ func (c *Chess) getKnightMoves(pos int, team string) []int {
 func (c *Chess) getBishopMoves(pos int, team string) []int {
 	moves := make([]int, 0)
 
-	moves = append(moves, c.getMovesInDirection(pos, -1, -1, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, -1, 1, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, 1, -1, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, 1, 1, team)...)
+	for _, d := range *Diagonals {
+		moves = append(moves, c.getMovesInDirection(pos, d, team)...)
+	}
 
 	return moves
 }
@@ -176,14 +157,9 @@ func (c *Chess) getBishopMoves(pos int, team string) []int {
 func (c *Chess) getQueenMoves(pos int, team string) []int {
 	moves := make([]int, 0)
 
-	moves = append(moves, c.getMovesInDirection(pos, -1, -1, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, -1, 0, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, -1, 1, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, 0, -1, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, 0, 1, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, 1, 0, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, 1, -1, team)...)
-	moves = append(moves, c.getMovesInDirection(pos, 1, 1, team)...)
+	for _, d := range *Adjacents {
+		moves = append(moves, c.getMovesInDirection(pos, d, team)...)
+	}
 
 	return moves
 }

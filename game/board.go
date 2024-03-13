@@ -21,7 +21,7 @@ var (
 	Adjacents      = &[]*Vector2{Left, UpLeft, Up, UpRight, Right, DownRight, Down, DownLeft}
 	WhitePawnMoves = &[]*Vector2{UpLeft, UpRight}
 	BlackPawnMoves = &[]*Vector2{DownLeft, DownRight}
-	KnightMoves    = &[]*Vector2{&Vector2{-2, -1}, &Vector2{-1, -2}, &Vector2{1, -2}, &Vector2{2, -1}, &Vector2{2, 1}, &Vector2{1, 2}, &Vector2{-1, 2}, &Vector2{-2, 1}}
+	KnightMoves    = &[]*Vector2{{-2, -1}, {-1, -2}, {1, -2}, {2, -1}, {2, 1}, {1, 2}, {-1, 2}, {-2, 1}}
 )
 
 type Chess struct {
