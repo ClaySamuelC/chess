@@ -4,6 +4,22 @@ import (
 	"fmt"
 )
 
+func DeepCopyGame(c *Chess) *Chess {
+	copy := &Chess{
+		Board:         c.Board,
+		Turn:          c.Turn,
+		EnPassantLoc:  c.EnPassantLoc,
+		HalfMoveClock: c.HalfMoveClock,
+		FullMoveClock: c.FullMoveClock,
+		PlayerInfo: map[string]*Info{
+			"White": {c.PlayerInfo["White"].IsKingCastleValid, c.PlayerInfo["White"].IsQueenCastleValid, c.PlayerInfo["White"].KingPos},
+			"Black": {c.PlayerInfo["Black"].IsKingCastleValid, c.PlayerInfo["Black"].IsQueenCastleValid, c.PlayerInfo["Black"].KingPos},
+		},
+	}
+
+	return copy
+}
+
 func isValidMove(src int, move *Vector2) bool {
 	return !(src%8+move.X < 0 || src%8+move.X > 7 || src/8+move.Y < 0 || src/8+move.Y > 7)
 }
@@ -38,6 +54,9 @@ func (c *Chess) GetPossibleMoves(p *Piece, pos int) []int {
 	if p.Rank == "King" {
 		return c.getKingMoves(pos, p.Team)
 	}
+	if c.IsInCheck(c.PlayerInfo[c.Turn].KingPos, p.Team) {
+		return []int{}
+	}
 	if p.Rank == "Pawn" {
 		return c.getPawnMoves(pos, p.Team)
 	}
@@ -57,6 +76,17 @@ func (c *Chess) GetPossibleMoves(p *Piece, pos int) []int {
 	return nil
 }
 
+func (c *Chess) WillBeInCheck(src int, dest int, team string) bool {
+	copy := DeepCopyGame(c)
+	copy.Move(src, dest)
+
+	kingPos := copy.PlayerInfo[team].KingPos
+
+	fmt.Printf("Checking if player is in check at (%c%v)%v\n", 'a'+kingPos%8, 8-kingPos/8, kingPos)
+
+	return copy.IsInCheck(kingPos, team)
+}
+
 func (c *Chess) getKingMoves(pos int, team string) []int {
 	moves := make([]int, 0)
 
@@ -64,19 +94,15 @@ func (c *Chess) getKingMoves(pos int, team string) []int {
 		if c.canMoveInDirection(pos, d, team) {
 			dest := pos + d.Y*8 + d.X
 
-			if !c.IsInCheck(dest) {
+			if !c.WillBeInCheck(pos, dest, team) {
 				moves = append(moves, dest)
-			} else {
 			}
 		}
 	}
 
 	if c.PlayerInfo[team].IsKingCastleValid {
-		fmt.Println("Here 1")
 		if c.canMoveInDirection(pos, Right, team) && c.canMoveInDirection(pos+1, Right, team) {
-			fmt.Println("Here 2")
-			if !c.IsInCheck(pos+1) && !c.IsInCheck(pos+2) {
-				fmt.Println("Here 3")
+			if !c.WillBeInCheck(pos, pos+1, team) && !c.WillBeInCheck(pos, pos+2, team) {
 				moves = append(moves, pos+2)
 			}
 		}
@@ -84,7 +110,7 @@ func (c *Chess) getKingMoves(pos int, team string) []int {
 
 	if c.PlayerInfo[c.Turn].IsQueenCastleValid {
 		if c.canMoveInDirection(pos, Left, team) && c.canMoveInDirection(pos-1, Left, team) {
-			if !c.IsInCheck(pos-1) && !c.IsInCheck(pos-2) {
+			if !c.WillBeInCheck(pos, pos-1, team) && !c.WillBeInCheck(pos, pos-2, team) {
 				moves = append(moves, pos-2)
 			}
 		}

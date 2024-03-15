@@ -36,6 +36,7 @@ type Chess struct {
 type Info struct {
 	IsKingCastleValid  bool
 	IsQueenCastleValid bool
+	KingPos            int
 }
 
 type Vector2 struct {
@@ -68,6 +69,13 @@ func CreateGame(fen string) (*Chess, error) {
 	info := strings.Fields(fen)
 
 	c := &Chess{}
+
+	// set castle info
+	c.PlayerInfo = make(map[string]*Info)
+
+	c.PlayerInfo["White"] = &Info{false, false, 0}
+	c.PlayerInfo["Black"] = &Info{false, false, 0}
+
 	x := 0
 	y := 0
 
@@ -80,9 +88,14 @@ func CreateGame(fen string) (*Chess, error) {
 		case '1', '2', '3', '4', '5', '6', '7', '8':
 			x += int(char - '0')
 		default:
+			if char == 'K' {
+				c.PlayerInfo["White"].KingPos = y*8 + x
+			} else if char == 'k' {
+				c.PlayerInfo["Black"].KingPos = y*8 + x
+			}
 			piece, ok := pieceMap[byte(char)]
 			if !ok {
-				return nil, fmt.Errorf("Invalid FEN char: %c", char)
+				return nil, fmt.Errorf("invalid FEN char: %c", char)
 			}
 			c.Board[y*8+x] = &piece
 			x++
@@ -96,11 +109,6 @@ func CreateGame(fen string) (*Chess, error) {
 		c.Turn = "Black"
 	}
 
-	// set castle info
-	c.PlayerInfo = make(map[string]*Info)
-
-	c.PlayerInfo["White"] = &Info{false, false}
-	c.PlayerInfo["Black"] = &Info{false, false}
 	for _, char := range info[2] {
 		switch char {
 		case 'K':
@@ -131,13 +139,16 @@ func CreateGame(fen string) (*Chess, error) {
 	// set full move clock
 	c.FullMoveClock, _ = strconv.Atoi(info[5])
 
+	fmt.Printf("White King Pos: %v\n", c.PlayerInfo["White"].KingPos)
+	fmt.Printf("Black King Pos: %v\n", c.PlayerInfo["Black"].KingPos)
+
 	return c, nil
 }
 
-func (c *Chess) IsInCheck(pos int) bool {
+func (c *Chess) IsInCheck(pos int, team string) bool {
 	enemy := "Black"
 	pawnDeltas := WhitePawnMoves
-	if c.Turn == "Black" {
+	if team == "Black" {
 		pawnDeltas = BlackPawnMoves
 		enemy = "White"
 	}
@@ -167,13 +178,13 @@ func (c *Chess) IsInCheck(pos int) bool {
 }
 
 func (c *Chess) Move(src int, dest int) {
+	fmt.Printf("King Pos: %v\n", c.PlayerInfo[c.Turn].KingPos)
 	p := c.Board[src]
 
 	if p.Rank == "King" {
 		c.PlayerInfo[c.Turn].IsKingCastleValid = false
 		c.PlayerInfo[c.Turn].IsQueenCastleValid = false
 
-		fmt.Println(dest - src)
 		if dest-src == -2 {
 			c.Board[dest+1] = c.Board[dest-2]
 			c.Board[dest-2] = nil
@@ -182,6 +193,8 @@ func (c *Chess) Move(src int, dest int) {
 			c.Board[dest-1] = c.Board[dest+1]
 			c.Board[dest+1] = nil
 		}
+
+		c.PlayerInfo[c.Turn].KingPos = dest
 	} else if p.Rank == "Rook" {
 		if src%8 == 0 {
 			c.PlayerInfo[c.Turn].IsQueenCastleValid = false
@@ -195,7 +208,6 @@ func (c *Chess) Move(src int, dest int) {
 	}
 	if p.Rank == "Pawn" {
 		if dest == c.EnPassantLoc {
-			fmt.Printf("En Passant at %v\n", dest)
 			if c.Turn == "White" {
 				c.Board[dest+8] = nil
 			} else {
@@ -215,8 +227,6 @@ func (c *Chess) Move(src int, dest int) {
 
 	c.Board[dest] = p
 	c.Board[src] = nil
-
-	fmt.Printf("Moving %v from (%v, %v) to (%v, %v).\n", p.Rank, src%8, src/8, dest%8, dest/8)
 
 	if c.Turn == "White" {
 		c.Turn = "Black"

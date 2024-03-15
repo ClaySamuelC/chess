@@ -110,7 +110,7 @@ func (g *Game) Update() error {
 
 	// check if mouse is clicked
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		fmt.Println(mouseTile)
+		fmt.Printf("%v (%c%v)\n", mouseTile, 'a'+mouseTile%8, 8-mouseTile/8)
 
 		// check if clicked square is within bounds
 		if mouseTile >= 0 && mouseTile < 64 {
