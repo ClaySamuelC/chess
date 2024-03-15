@@ -4,209 +4,187 @@ import (
 	"fmt"
 )
 
-func (b *Board) isValidDest(x int, y int, team string) bool {
-	if x < 0 || x > 7 || y < 0 || y > 7 {
-		return false
+func DeepCopyGame(c *Chess) *Chess {
+	copy := &Chess{
+		Board:         c.Board,
+		Turn:          c.Turn,
+		EnPassantLoc:  c.EnPassantLoc,
+		HalfMoveClock: c.HalfMoveClock,
+		FullMoveClock: c.FullMoveClock,
+		PlayerInfo: map[string]*Info{
+			"White": {c.PlayerInfo["White"].IsKingCastleValid, c.PlayerInfo["White"].IsQueenCastleValid, c.PlayerInfo["White"].KingPos},
+			"Black": {c.PlayerInfo["Black"].IsKingCastleValid, c.PlayerInfo["Black"].IsQueenCastleValid, c.PlayerInfo["Black"].KingPos},
+		},
 	}
 
-	destPiece := b.Squares[y][x]
-	if destPiece != nil && destPiece.Team == team {
-		return false
-	}
-
-	return true
+	return copy
 }
 
-func (b *Board) appendIfValid(xMove int, yMove int, arr []*Vector2, pos *Vector2, team string) ([]*Vector2, string) {
-	if team == "White" {
-		yMove = -yMove
-	}
+func isValidMove(src int, move *Vector2) bool {
+	return !(src%8+move.X < 0 || src%8+move.X > 7 || src/8+move.Y < 0 || src/8+move.Y > 7)
+}
 
-	dest := &Vector2{pos.X + xMove, pos.Y + yMove}
+func (c *Chess) canMoveInDirection(pos int, d *Vector2, team string) bool {
+	dest := pos + d.Y*8 + d.X
+	return isValidMove(pos, d) && (c.Board[dest] == nil || c.Board[dest].Team != team)
+}
 
-	if b.isValidDest(dest.X, dest.Y, team) {
-		if b.Squares[dest.Y][dest.X] == nil {
-			return append(arr, dest), "Blank"
+func (c *Chess) getMovesInDirection(pos int, d *Vector2, team string) []int {
+	moves := make([]int, 0)
+
+	for true {
+		if !c.canMoveInDirection(pos, d, team) {
+			return moves
 		}
 
-		return append(arr, dest), b.Squares[dest.Y][dest.X].Team
+		pos += d.Y*8 + d.X
+		moves = append(moves, pos)
+
+		if c.Board[pos] != nil {
+			return moves
+		}
 	}
 
-	return arr, "Invalid"
+	fmt.Println("Something's wrong")
+	return moves
 }
 
-func (b *Board) GetPossibleMoves(p *Piece, pos *Vector2) []*Vector2 {
+func (c *Chess) GetPossibleMoves(p *Piece, pos int) []int {
 	fmt.Printf("Checking for %v moves.\n", p.Rank)
 	if p.Rank == "King" {
-		return b.getKingMoves(pos, p.Team)
+		return c.getKingMoves(pos, p.Team)
+	}
+	if c.IsInCheck(c.PlayerInfo[c.Turn].KingPos, p.Team) {
+		return []int{}
 	}
 	if p.Rank == "Pawn" {
-		return b.getPawnMoves(pos, p.Team)
+		return c.getPawnMoves(pos, p.Team)
 	}
 	if p.Rank == "Rook" {
-		return b.getRookMoves(pos, p.Team)
+		return c.getRookMoves(pos, p.Team)
 	}
 	if p.Rank == "Knight" {
-		return b.getKnightMoves(pos, p.Team)
+		return c.getKnightMoves(pos, p.Team)
 	}
 	if p.Rank == "Bishop" {
-		return b.getBishopMoves(pos, p.Team)
+		return c.getBishopMoves(pos, p.Team)
 	}
 	if p.Rank == "Queen" {
-		return b.getQueenMoves(pos, p.Team)
+		return c.getQueenMoves(pos, p.Team)
 	}
 
 	return nil
 }
 
-func (b *Board) getKingMoves(pos *Vector2, team string) []*Vector2 {
-	moves := make([]*Vector2, 0)
+func (c *Chess) WillBeInCheck(src int, dest int, team string) bool {
+	copy := DeepCopyGame(c)
+	copy.Move(src, dest)
 
-	// check if player can castle
-	if !b.PlayerInfo[team].HasKingMoved {
-		// fmt.Println("King has not moved")
-		// check left
-		if b.Squares[pos.Y][0].Rank == "Rook" && b.Squares[pos.Y][0].Team == team {
-			// fmt.Println("Left rook in position.")
-			if b.Squares[pos.Y][1] == nil && b.Squares[pos.Y][2] == nil && b.Squares[pos.Y][3] == nil {
-				moves, _ = b.appendIfValid(-2, 0, moves, pos, team)
+	kingPos := copy.PlayerInfo[team].KingPos
+
+	fmt.Printf("Checking if player is in check at (%c%v)%v\n", 'a'+kingPos%8, 8-kingPos/8, kingPos)
+
+	return copy.IsInCheck(kingPos, team)
+}
+
+func (c *Chess) getKingMoves(pos int, team string) []int {
+	moves := make([]int, 0)
+
+	for _, d := range *Adjacents {
+		if c.canMoveInDirection(pos, d, team) {
+			dest := pos + d.Y*8 + d.X
+
+			if !c.WillBeInCheck(pos, dest, team) {
+				moves = append(moves, dest)
 			}
 		}
-		// check right
-		if b.Squares[pos.Y][7].Rank == "Rook" && b.Squares[pos.Y][0].Team == team {
-			if b.Squares[pos.Y][5] == nil && b.Squares[pos.Y][6] == nil {
-				moves, _ = b.appendIfValid(2, 0, moves, pos, team)
+	}
+
+	if c.PlayerInfo[team].IsKingCastleValid {
+		if c.canMoveInDirection(pos, Right, team) && c.canMoveInDirection(pos+1, Right, team) {
+			if !c.WillBeInCheck(pos, pos+1, team) && !c.WillBeInCheck(pos, pos+2, team) {
+				moves = append(moves, pos+2)
 			}
 		}
 	}
 
-	moves, _ = b.appendIfValid(-1, -1, moves, pos, team)
-	moves, _ = b.appendIfValid(-1, 0, moves, pos, team)
-	moves, _ = b.appendIfValid(-1, 1, moves, pos, team)
-	moves, _ = b.appendIfValid(0, -1, moves, pos, team)
-	moves, _ = b.appendIfValid(0, 1, moves, pos, team)
-	moves, _ = b.appendIfValid(1, -1, moves, pos, team)
-	moves, _ = b.appendIfValid(1, 0, moves, pos, team)
-	moves, _ = b.appendIfValid(1, 1, moves, pos, team)
-
-	return moves
-}
-
-func (b *Board) getPawnMoves(pos *Vector2, team string) []*Vector2 {
-	moves := make([]*Vector2, 0)
-	var moveSignal string
-
-	_, moveSignal = b.appendIfValid(0, 1, moves, pos, team)
-	if moveSignal == "Blank" {
-		moves, _ = b.appendIfValid(0, 1, moves, pos, team)
-
-		if moveSignal == "Blank" && pos.Y == 6 && team == "White" || pos.Y == 1 && team == "Black" {
-			moves, _ = b.appendIfValid(0, 2, moves, pos, team)
-		}
-	}
-
-	_, moveSignal = b.appendIfValid(-1, 1, moves, pos, team)
-	if moveSignal != "Blank" && moveSignal != team {
-		moves, _ = b.appendIfValid(-1, 1, moves, pos, team)
-		// if en passant is valid
-	} else if b.CanEnPassant(pos, -1, 1) {
-		fmt.Println("Can En Passant!")
-		moves, _ = b.appendIfValid(-1, 1, moves, pos, team)
-	}
-	_, moveSignal = b.appendIfValid(1, 1, moves, pos, team)
-	if moveSignal != "Blank" && moveSignal != team {
-		moves, _ = b.appendIfValid(1, 1, moves, pos, team)
-	} else if b.CanEnPassant(pos, 1, 1) {
-		fmt.Println("Can En Passant!")
-		moves, _ = b.appendIfValid(1, 1, moves, pos, team)
-	}
-
-	return moves
-}
-
-func (b *Board) getRookMoves(pos *Vector2, team string) []*Vector2 {
-	moves := make([]*Vector2, 0)
-	var moveSignal string
-
-	directions := [4]Vector2{
-		{0, 1},
-		{0, -1},
-		{-1, 0},
-		{1, 0},
-	}
-
-	for _, dir := range directions {
-		flag := true
-
-		for step := 1; flag; step++ {
-			moves, moveSignal = b.appendIfValid(step*dir.X, step*dir.Y, moves, pos, team)
-			flag = moveSignal == "Blank"
+	if c.PlayerInfo[c.Turn].IsQueenCastleValid {
+		if c.canMoveInDirection(pos, Left, team) && c.canMoveInDirection(pos-1, Left, team) {
+			if !c.WillBeInCheck(pos, pos-1, team) && !c.WillBeInCheck(pos, pos-2, team) {
+				moves = append(moves, pos-2)
+			}
 		}
 	}
 
 	return moves
 }
 
-func (b *Board) getKnightMoves(pos *Vector2, team string) []*Vector2 {
-	moves := make([]*Vector2, 0)
+func (c *Chess) getPawnMoves(pos int, team string) []int {
+	moves := make([]int, 0)
 
-	moves, _ = b.appendIfValid(2, 1, moves, pos, team)
-	moves, _ = b.appendIfValid(2, -1, moves, pos, team)
-	moves, _ = b.appendIfValid(1, 2, moves, pos, team)
-	moves, _ = b.appendIfValid(1, -2, moves, pos, team)
-	moves, _ = b.appendIfValid(-1, 2, moves, pos, team)
-	moves, _ = b.appendIfValid(-1, -2, moves, pos, team)
-	moves, _ = b.appendIfValid(-2, 1, moves, pos, team)
-	moves, _ = b.appendIfValid(-2, -1, moves, pos, team)
+	start := 1
+	dy := 8
+	if team == "White" {
+		dy = -8
+		start = 6
+	}
+
+	if c.Board[pos+dy] == nil {
+		moves = append(moves, pos+dy)
+		if pos/8 == start && c.Board[pos+dy*2] == nil {
+			moves = append(moves, pos+dy*2)
+		}
+	}
+
+	// check forward-left
+	if (pos%8-1 >= 0 && c.Board[pos+dy-1] != nil && c.Board[pos+dy-1].Team != team) || c.EnPassantLoc == pos+dy-1 {
+		moves = append(moves, pos+dy-1)
+	}
+	// check forward-right
+	if (pos%8+1 <= 7 && c.Board[pos+dy+1] != nil && c.Board[pos+dy+1].Team != team) || c.EnPassantLoc == pos+dy+1 {
+		moves = append(moves, pos+dy+1)
+	}
 
 	return moves
 }
 
-func (b *Board) getBishopMoves(pos *Vector2, team string) []*Vector2 {
-	moves := make([]*Vector2, 0)
-	var moveSignal string
+func (c *Chess) getRookMoves(pos int, team string) []int {
+	moves := make([]int, 0)
 
-	directions := [4]Vector2{
-		{1, 1},
-		{1, -1},
-		{-1, 1},
-		{-1, -1},
+	for _, d := range *Straights {
+		moves = append(moves, c.getMovesInDirection(pos, d, team)...)
 	}
 
-	for _, dir := range directions {
-		flag := true
+	return moves
+}
 
-		for step := 1; flag; step++ {
-			moves, moveSignal = b.appendIfValid(step*dir.X, step*dir.Y, moves, pos, team)
-			flag = moveSignal == "Blank"
+func (c *Chess) getKnightMoves(pos int, team string) []int {
+	moves := make([]int, 0)
+
+	for _, d := range *KnightMoves {
+		if c.canMoveInDirection(pos, d, team) {
+			moves = append(moves, pos+d.Y*8+d.X)
 		}
 	}
 
 	return moves
 }
 
-func (b *Board) getQueenMoves(pos *Vector2, team string) []*Vector2 {
-	moves := make([]*Vector2, 0)
-	var moveSignal string
+func (c *Chess) getBishopMoves(pos int, team string) []int {
+	moves := make([]int, 0)
 
-	directions := [8]Vector2{
-		{0, 1},
-		{0, -1},
-		{-1, 0},
-		{1, 0},
-		{1, 1},
-		{1, -1},
-		{-1, 1},
-		{-1, -1},
+	for _, d := range *Diagonals {
+		moves = append(moves, c.getMovesInDirection(pos, d, team)...)
 	}
 
-	for _, dir := range directions {
-		flag := true
+	return moves
+}
 
-		for step := 1; flag; step++ {
-			moves, moveSignal = b.appendIfValid(step*dir.X, step*dir.Y, moves, pos, team)
-			flag = moveSignal == "Blank"
-		}
+func (c *Chess) getQueenMoves(pos int, team string) []int {
+	moves := make([]int, 0)
+
+	for _, d := range *Adjacents {
+		moves = append(moves, c.getMovesInDirection(pos, d, team)...)
 	}
 
 	return moves

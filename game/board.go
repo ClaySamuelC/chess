@@ -1,23 +1,42 @@
 package game
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
 
-type Board struct {
-	Squares       [8][8]*Piece
-	PlayerTurn    string
-	CurrentTurn   int
-	IsHighlighted bool
-	HighlightX    int
-	HighlightY    int
-	PossibleMoves []*Vector2
-	EnPassantLoc  *Vector2
-	LastEnPassant int
+var (
+	UpLeft    = &Vector2{-1, -1}
+	UpRight   = &Vector2{-1, 1}
+	DownLeft  = &Vector2{1, -1}
+	DownRight = &Vector2{1, 1}
+	Up        = &Vector2{0, -1}
+	Right     = &Vector2{1, 0}
+	Down      = &Vector2{0, 1}
+	Left      = &Vector2{-1, 0}
+
+	Diagonals      = &[]*Vector2{UpLeft, UpRight, DownRight, DownLeft}
+	Straights      = &[]*Vector2{Left, Up, Right, Down}
+	Adjacents      = &[]*Vector2{Left, UpLeft, Up, UpRight, Right, DownRight, Down, DownLeft}
+	WhitePawnMoves = &[]*Vector2{UpLeft, UpRight}
+	BlackPawnMoves = &[]*Vector2{DownLeft, DownRight}
+	KnightMoves    = &[]*Vector2{{-2, -1}, {-1, -2}, {1, -2}, {2, -1}, {2, 1}, {1, 2}, {-1, 2}, {-2, 1}}
+)
+
+type Chess struct {
+	Board         [64]*Piece
+	Turn          string
+	EnPassantLoc  int
+	HalfMoveClock int
+	FullMoveClock int
 	PlayerInfo    map[string]*Info
 }
 
 type Info struct {
-	HasKingMoved bool
-	IsInCheck    bool
+	IsKingCastleValid  bool
+	IsQueenCastleValid bool
+	KingPos            int
 }
 
 type Vector2 struct {
@@ -25,137 +44,194 @@ type Vector2 struct {
 	Y int
 }
 
-func (b *Board) CanEnPassant(pawnLoc *Vector2, dx int, dy int) bool {
-	fmt.Printf("Current Turn: %v, Last En Passantable Move: %v\n", b.CurrentTurn, b.LastEnPassant)
-	if b.LastEnPassant != b.CurrentTurn-1 {
-		return false
-	}
-	if b.PlayerTurn == "White" {
-		dy = -dy
-	}
-	return b.EnPassantLoc.X == pawnLoc.X+dx && b.EnPassantLoc.Y == pawnLoc.Y+dy
+func CreateDefaultGame() (*Chess, error) {
+	game, err := CreateGame("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 0h")
+
+	return game, err
 }
 
-func (b *Board) HighlightSquare(x int, y int) bool {
-	if b.IsHighlighted && b.HighlightX == x && b.HighlightY == y {
-		return false
-	}
-	if b.Squares[y][x] != nil {
-		if b.Squares[y][x].Team == b.PlayerTurn {
-			fmt.Printf("Highlighting Square(%d, %d)\n", x, y)
-			b.IsHighlighted = true
-			b.HighlightX = x
-			b.HighlightY = y
-
-			return true
-		}
-	}
-
-	b.IsHighlighted = false
-	return false
-}
-
-func NewBoard() *Board {
-	b := &Board{}
-	b.SetDefault()
-	return b
-}
-
-func (b *Board) Move(srcX int, srcY int, destX int, destY int) {
-	p := b.Squares[srcY][srcX]
-
-	b.Squares[destY][destX] = p
-	b.Squares[srcY][srcX] = nil
-
-	fmt.Printf("Moving %v from (%v, %v) to (%v, %v).\n", p.Rank, srcX, srcY, destX, destY)
-
-	// special king cases
-	if p.Rank == "King" {
-		b.PlayerInfo[b.PlayerTurn].HasKingMoved = true
-
-		// if castling, move the rook as well
-		if destX-srcX == -2 {
-			b.Squares[destY][3] = b.Squares[destY][0]
-			b.Squares[destY][0] = nil
-		}
-		if destX-srcX == 2 {
-			b.Squares[destY][5] = b.Squares[destY][0]
-			b.Squares[destY][7] = nil
-		}
+func CreateGame(fen string) (*Chess, error) {
+	pieceMap := map[byte]Piece{
+		'P': {"White", "Pawn"},
+		'N': {"White", "Knight"},
+		'B': {"White", "Bishop"},
+		'R': {"White", "Rook"},
+		'Q': {"White", "Queen"},
+		'K': {"White", "King"},
+		'p': {"Black", "Pawn"},
+		'n': {"Black", "Knight"},
+		'b': {"Black", "Bishop"},
+		'r': {"Black", "Rook"},
+		'q': {"Black", "Queen"},
+		'k': {"Black", "King"},
 	}
 
-	// special pawn cases
-	if p.Rank == "Pawn" {
-		if destY == 0 || destY == 7 { // Promotion
-			fmt.Println("Promote!!!!")
-			p.Rank = "Queen"
-		} else if destY-srcY == 2 { // If pawn double moved, update en passant info
-			b.EnPassantLoc = &Vector2{destX, destY - 1}
-			b.LastEnPassant = b.CurrentTurn
-			fmt.Printf("Making double move, En Passant loc = (%v, %v), En Passant/Current Turn (%v, %v).\n", b.EnPassantLoc.X, b.EnPassantLoc.Y, b.LastEnPassant, b.CurrentTurn)
-		} else if destY-srcY == -2 {
-			b.EnPassantLoc = &Vector2{destX, destY + 1}
-			b.LastEnPassant = b.CurrentTurn
-			fmt.Printf("Making double move, En Passant loc = (%v, %v), En Passant/Current Turn (%v, %v).\n", b.EnPassantLoc.X, b.EnPassantLoc.Y, b.LastEnPassant, b.CurrentTurn)
-		}
-		// Handle En Passant
-		if b.LastEnPassant == b.CurrentTurn-1 && destX == b.EnPassantLoc.X && destY == b.EnPassantLoc.Y {
-			// destroy pawn under move
-			dy := -1
-			if b.PlayerTurn == "White" {
-				dy = 1
+	info := strings.Fields(fen)
+
+	c := &Chess{}
+
+	// set castle info
+	c.PlayerInfo = make(map[string]*Info)
+
+	c.PlayerInfo["White"] = &Info{false, false, 0}
+	c.PlayerInfo["Black"] = &Info{false, false, 0}
+
+	x := 0
+	y := 0
+
+	// populate board
+	for _, char := range info[0] {
+		switch char {
+		case '/':
+			y++
+			x = 0
+		case '1', '2', '3', '4', '5', '6', '7', '8':
+			x += int(char - '0')
+		default:
+			if char == 'K' {
+				c.PlayerInfo["White"].KingPos = y*8 + x
+			} else if char == 'k' {
+				c.PlayerInfo["Black"].KingPos = y*8 + x
 			}
-
-			b.Squares[destY+dy][destX] = nil
+			piece, ok := pieceMap[byte(char)]
+			if !ok {
+				return nil, fmt.Errorf("invalid FEN char: %c", char)
+			}
+			c.Board[y*8+x] = &piece
+			x++
 		}
 	}
 
-	b.IsHighlighted = false
-	b.CurrentTurn += 1
-	if b.PlayerTurn == "White" {
-		b.PlayerTurn = "Black"
+	// set current turn
+	if info[1] == "w" {
+		c.Turn = "White"
 	} else {
-		b.PlayerTurn = "White"
+		c.Turn = "Black"
 	}
+
+	for _, char := range info[2] {
+		switch char {
+		case 'K':
+			fmt.Println("White can castle king side.")
+			c.PlayerInfo["White"].IsKingCastleValid = true
+		case 'Q':
+			fmt.Println("White can castle queen side.")
+			c.PlayerInfo["White"].IsQueenCastleValid = true
+		case 'k':
+			fmt.Println("Black can castle king side.")
+			c.PlayerInfo["Black"].IsKingCastleValid = true
+		case 'q':
+			fmt.Println("Black can castle queen side.")
+			c.PlayerInfo["Black"].IsQueenCastleValid = true
+		}
+	}
+
+	// set en passant targets
+	if info[3] == "-" {
+		c.EnPassantLoc = -999
+	} else {
+		c.EnPassantLoc = (int(info[3][1])-49)*8 + int(info[3][0]) - 97
+	}
+
+	// set half move clock
+	c.HalfMoveClock, _ = strconv.Atoi(info[4])
+
+	// set full move clock
+	c.FullMoveClock, _ = strconv.Atoi(info[5])
+
+	fmt.Printf("White King Pos: %v\n", c.PlayerInfo["White"].KingPos)
+	fmt.Printf("Black King Pos: %v\n", c.PlayerInfo["Black"].KingPos)
+
+	return c, nil
 }
 
-func (b *Board) SetDefault() {
-	for i := 0; i < 8; i++ {
-		b.Squares[1][i] = NewPiece("Pawn", "Black")
-		b.Squares[6][i] = NewPiece("Pawn", "White")
+func (c *Chess) IsInCheck(pos int, team string) bool {
+	enemy := "Black"
+	pawnDeltas := WhitePawnMoves
+	if team == "Black" {
+		pawnDeltas = BlackPawnMoves
+		enemy = "White"
 	}
 
-	b.Squares[0][0] = NewPiece("Rook", "Black")
-	b.Squares[0][1] = NewPiece("Knight", "Black")
-	b.Squares[0][2] = NewPiece("Bishop", "Black")
-	b.Squares[0][3] = NewPiece("Queen", "Black")
-	b.Squares[0][4] = NewPiece("King", "Black")
-	b.Squares[0][5] = NewPiece("Bishop", "Black")
-	b.Squares[0][6] = NewPiece("Knight", "Black")
-	b.Squares[0][7] = NewPiece("Rook", "Black")
-
-	b.Squares[7][0] = NewPiece("Rook", "White")
-	b.Squares[7][1] = NewPiece("Knight", "White")
-	b.Squares[7][2] = NewPiece("Bishop", "White")
-	b.Squares[7][3] = NewPiece("Queen", "White")
-	b.Squares[7][4] = NewPiece("King", "White")
-	b.Squares[7][5] = NewPiece("Bishop", "White")
-	b.Squares[7][6] = NewPiece("Knight", "White")
-	b.Squares[7][7] = NewPiece("Rook", "White")
-
-	b.CurrentTurn = 1
-	b.LastEnPassant = -1
-	b.IsHighlighted = false
-	b.PlayerTurn = "White"
-
-	b.PlayerInfo = make(map[string]*Info)
-	b.PlayerInfo["White"] = &Info{
-		HasKingMoved: false,
-		IsInCheck:    false,
+	// check for pawns in opposing pawn squares
+	if c.CheckSquares(pos, pawnDeltas, enemy, &map[string]bool{"Pawn": true, "King": true, "Bishop": true, "Queen": true}) {
+		return true
 	}
 
-	b.PlayerInfo["Black"] = &Info{
-		HasKingMoved: false,
-		IsInCheck:    false,
+	// check for knights
+	if c.CheckSquares(pos, KnightMoves, enemy, &map[string]bool{"Knight": true}) {
+		return true
+	}
+
+	// raycast for rooks or queens
+	if c.MultiRayCast(pos, Straights, enemy, &map[string]bool{"Rook": true, "Queen": true}) {
+		return true
+	}
+
+	// raycast for bishops or queens
+	if c.MultiRayCast(pos, Diagonals, enemy, &map[string]bool{"Bishop": true, "Queen": true}) {
+		return true
+	}
+
+	// check for king
+	return c.CheckSquares(pos, Adjacents, enemy, &map[string]bool{"King": true})
+}
+
+func (c *Chess) Move(src int, dest int) {
+	fmt.Printf("King Pos: %v\n", c.PlayerInfo[c.Turn].KingPos)
+	p := c.Board[src]
+
+	if p.Rank == "King" {
+		c.PlayerInfo[c.Turn].IsKingCastleValid = false
+		c.PlayerInfo[c.Turn].IsQueenCastleValid = false
+
+		if dest-src == -2 {
+			c.Board[dest+1] = c.Board[dest-2]
+			c.Board[dest-2] = nil
+		}
+		if dest-src == 2 {
+			c.Board[dest-1] = c.Board[dest+1]
+			c.Board[dest+1] = nil
+		}
+
+		c.PlayerInfo[c.Turn].KingPos = dest
+	} else if p.Rank == "Rook" {
+		if src%8 == 0 {
+			c.PlayerInfo[c.Turn].IsQueenCastleValid = false
+		} else if src%8 == 7 {
+			c.PlayerInfo[c.Turn].IsKingCastleValid = false
+		}
+	}
+
+	if c.Board[dest] == nil && p.Rank != "Pawn" {
+		c.HalfMoveClock += 1
+	}
+	if p.Rank == "Pawn" {
+		if dest == c.EnPassantLoc {
+			if c.Turn == "White" {
+				c.Board[dest+8] = nil
+			} else {
+				c.Board[dest-8] = nil
+			}
+		}
+		if dest-src == 16 {
+			c.EnPassantLoc = dest - 8
+		} else if dest-src == -16 {
+			c.EnPassantLoc = dest + 8
+		} else {
+			c.EnPassantLoc = -999
+		}
+	} else {
+		c.EnPassantLoc = -999
+	}
+
+	c.Board[dest] = p
+	c.Board[src] = nil
+
+	if c.Turn == "White" {
+		c.Turn = "Black"
+	} else {
+		c.Turn = "White"
+		c.FullMoveClock += 1
 	}
 }
