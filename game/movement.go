@@ -24,29 +24,61 @@ func isValidMove(src int, move *Vector2) bool {
 	return !(src%8+move.X < 0 || src%8+move.X > 7 || src/8+move.Y < 0 || src/8+move.Y > 7)
 }
 
+func (c *Chess) IsInCheck(pos int, team string) bool {
+	enemy := "Black"
+	pawnDeltas := WhitePawnMoves
+	if team == "Black" {
+		pawnDeltas = BlackPawnMoves
+		enemy = "White"
+	}
+
+	// check for pawns in opposing pawn squares
+	if c.CheckSquares(pos, pawnDeltas, enemy, &map[string]bool{"Pawn": true, "King": true, "Bishop": true, "Queen": true}) {
+		return true
+	}
+
+	// check for knights
+	if c.CheckSquares(pos, KnightMoves, enemy, &map[string]bool{"Knight": true}) {
+		return true
+	}
+
+	// raycast for rooks or queens
+	if c.MultiRayCast(pos, Straights, enemy, &map[string]bool{"Rook": true, "Queen": true}) {
+		return true
+	}
+
+	// raycast for bishops or queens
+	if c.MultiRayCast(pos, Diagonals, enemy, &map[string]bool{"Bishop": true, "Queen": true}) {
+		return true
+	}
+
+	// check for king
+	return c.CheckSquares(pos, Adjacents, enemy, &map[string]bool{"King": true})
+}
+
 func (c *Chess) canMoveInDirection(pos int, d *Vector2, team string) bool {
 	dest := pos + d.Y*8 + d.X
 	return isValidMove(pos, d) && (c.Board[dest] == nil || c.Board[dest].Team != team)
 }
 
-func (c *Chess) getMovesInDirection(pos int, d *Vector2, team string) []int {
+func (c *Chess) getMovesInDirection(pos int, d *Vector2, team string) *[]int {
 	moves := make([]int, 0)
 
 	for {
 		if !c.canMoveInDirection(pos, d, team) {
-			return moves
+			return &moves
 		}
 
 		pos += d.Y*8 + d.X
 		moves = append(moves, pos)
 
 		if c.Board[pos] != nil {
-			return moves
+			return &moves
 		}
 	}
 }
 
-func (c *Chess) GetPossibleMoves(p *Piece, pos int) []int {
+func (c *Chess) GetPossibleMoves(p *Piece, pos int) *[]int {
 	fmt.Printf("Checking for %v moves.\n", p.Rank)
 	if p.Rank == "King" {
 		return c.getKingMoves(pos, p.Team)
@@ -81,7 +113,7 @@ func (c *Chess) WillBeInCheck(src int, dest int, team string) bool {
 	return copy.IsInCheck(kingPos, team)
 }
 
-func (c *Chess) getKingMoves(pos int, team string) []int {
+func (c *Chess) getKingMoves(pos int, team string) *[]int {
 	moves := make([]int, 0)
 
 	for _, d := range *Adjacents {
@@ -110,10 +142,10 @@ func (c *Chess) getKingMoves(pos int, team string) []int {
 		}
 	}
 
-	return moves
+	return &moves
 }
 
-func (c *Chess) getPawnMoves(pos int, team string) []int {
+func (c *Chess) getPawnMoves(pos int, team string) *[]int {
 	moves := make([]int, 0)
 
 	start := 1
@@ -147,24 +179,24 @@ func (c *Chess) getPawnMoves(pos int, team string) []int {
 		}
 	}
 
-	return moves
+	return &moves
 }
 
-func (c *Chess) getRookMoves(pos int, team string) []int {
+func (c *Chess) getRookMoves(pos int, team string) *[]int {
 	moves := make([]int, 0)
 
 	for _, d := range *Straights {
-		for _, move := range c.getMovesInDirection(pos, d, team) {
+		for _, move := range *c.getMovesInDirection(pos, d, team) {
 			if !c.WillBeInCheck(pos, move, team) {
 				moves = append(moves, move)
 			}
 		}
 	}
 
-	return moves
+	return &moves
 }
 
-func (c *Chess) getKnightMoves(pos int, team string) []int {
+func (c *Chess) getKnightMoves(pos int, team string) *[]int {
 	moves := make([]int, 0)
 
 	for _, d := range *KnightMoves {
@@ -175,33 +207,33 @@ func (c *Chess) getKnightMoves(pos int, team string) []int {
 		}
 	}
 
-	return moves
+	return &moves
 }
 
-func (c *Chess) getBishopMoves(pos int, team string) []int {
+func (c *Chess) getBishopMoves(pos int, team string) *[]int {
 	moves := make([]int, 0)
 
 	for _, d := range *Diagonals {
-		for _, move := range c.getMovesInDirection(pos, d, team) {
+		for _, move := range *c.getMovesInDirection(pos, d, team) {
 			if !c.WillBeInCheck(pos, move, team) {
 				moves = append(moves, move)
 			}
 		}
 	}
 
-	return moves
+	return &moves
 }
 
-func (c *Chess) getQueenMoves(pos int, team string) []int {
+func (c *Chess) getQueenMoves(pos int, team string) *[]int {
 	moves := make([]int, 0)
 
 	for _, d := range *Adjacents {
-		for _, move := range c.getMovesInDirection(pos, d, team) {
+		for _, move := range *c.getMovesInDirection(pos, d, team) {
 			if !c.WillBeInCheck(pos, move, team) {
 				moves = append(moves, move)
 			}
 		}
 	}
 
-	return moves
+	return &moves
 }

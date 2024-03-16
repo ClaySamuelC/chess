@@ -22,6 +22,18 @@ const (
 	yOffset  = 19
 )
 
+var (
+	backgroundImg *ebiten.Image
+	pieceImageMap map[string]*ebiten.Image
+
+	selectedColor color.RGBA
+	moveableColor color.RGBA
+
+	chess          *game.Chess
+	selectedSquare int
+	possibleMoves  *map[int]*[]int
+)
+
 func getScreenSpace(tile int) (int, int) {
 	x := (tile%8)*tileSize + xOffset - 2
 	y := (tile/8)*tileSize + yOffset - 5
@@ -35,18 +47,6 @@ func getTileSpace(screen_x int, screen_y int) int {
 
 	return int(y*8 + x)
 }
-
-var (
-	backgroundImg *ebiten.Image
-	pieceImageMap map[string]*ebiten.Image
-
-	selectedColor color.RGBA
-	moveableColor color.RGBA
-
-	chess          *game.Chess
-	selectedSquare int
-	possibleMoves  []int
-)
 
 func getImage(imagePath string) *ebiten.Image {
 	img, _, err := ebitenutil.NewImageFromFile(imagePath)
@@ -73,6 +73,10 @@ func isIn(x int, arr []int) bool {
 	return false
 }
 
+func updatePossibleMoves() {
+	possibleMoves = chess.GetAllMoves(chess.Turn)
+}
+
 func init() {
 	backgroundImg = getImage("assets/board.png")
 	selectedColor = color.RGBA{0x00, 0x80, 0xFF, 0x80}
@@ -93,10 +97,12 @@ func init() {
 	pieceImageMap["BlackKing"] = getImage("assets/BlackKing.png")
 
 	var err error
-	chess, err = game.CreateGame("r3k2r/1n6/8/8/8/8/6N1/R3K2R w KQkq - 0 1")
+	chess, err = game.CreateDefaultGame()
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	updatePossibleMoves()
 
 	selectedSquare = -1
 }

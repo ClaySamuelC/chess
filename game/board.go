@@ -145,38 +145,6 @@ func CreateGame(fen string) (*Chess, error) {
 	return c, nil
 }
 
-func (c *Chess) IsInCheck(pos int, team string) bool {
-	enemy := "Black"
-	pawnDeltas := WhitePawnMoves
-	if team == "Black" {
-		pawnDeltas = BlackPawnMoves
-		enemy = "White"
-	}
-
-	// check for pawns in opposing pawn squares
-	if c.CheckSquares(pos, pawnDeltas, enemy, &map[string]bool{"Pawn": true, "King": true, "Bishop": true, "Queen": true}) {
-		return true
-	}
-
-	// check for knights
-	if c.CheckSquares(pos, KnightMoves, enemy, &map[string]bool{"Knight": true}) {
-		return true
-	}
-
-	// raycast for rooks or queens
-	if c.MultiRayCast(pos, Straights, enemy, &map[string]bool{"Rook": true, "Queen": true}) {
-		return true
-	}
-
-	// raycast for bishops or queens
-	if c.MultiRayCast(pos, Diagonals, enemy, &map[string]bool{"Bishop": true, "Queen": true}) {
-		return true
-	}
-
-	// check for king
-	return c.CheckSquares(pos, Adjacents, enemy, &map[string]bool{"King": true})
-}
-
 func (c *Chess) Move(src int, dest int) {
 	fmt.Printf("King Pos: %v\n", c.PlayerInfo[c.Turn].KingPos)
 	p := c.Board[src]
@@ -234,4 +202,16 @@ func (c *Chess) Move(src int, dest int) {
 		c.Turn = "White"
 		c.FullMoveClock += 1
 	}
+}
+
+func (c *Chess) GetAllMoves(team string) *map[int]*[]int {
+	moveMap := map[int]*[]int{}
+
+	for i, p := range c.Board {
+		if p.Team == team {
+			moveMap[i] = c.GetPossibleMoves(p, i)
+		}
+	}
+
+	return &moveMap
 }
